@@ -318,7 +318,7 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
       PrintMessage "done!\r\n"      
 
       PrintMessage "Enabling unreal mode . . . "      
-      call EnableUnrealMode                               // Enable unreal mode for FS segment Value 
+      call EnableUnrealMode                               // Enable unreal mode for FS segment register 
       jz Hang
       PrintMessage "done!\r\n"      
 
