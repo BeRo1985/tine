@@ -2,7 +2,7 @@
 **
 **                                TINE (This is not EFI)
 **
-**                           Version 1.00.2015.09.18.06.42.0000
+**                           Version 1.00.2015.09.18.07.00.0000
 **
 ****************************************************************************************
 **
@@ -283,10 +283,16 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
   // We're loaded at 0070:0000 
   
   {
-
-    jmp short SkipSignature
-      Signature:
-        db "2NDS" // 2ND Stage        
+    LoaderEntryPoint:
+      jmp short SkipSignature
+    Signature:
+      db "TINE\0"
+      !script{
+          var MillisecondsElapsedSince1January1970_00_00_00_UTC = Date.now();
+          var TimeDateString = (new Date()).toUTCString();
+          Assembler.parse("dq " + MillisecondsElapsedSince1January1970_00_00_00_UTC);
+          Assembler.parse("db \"" + TimeDateString + "\\0\"");
+      }    
     SkipSignature:
 
       // Jump from 0070:0000 into 0000:0700 space, so that CS and DS can be zero
