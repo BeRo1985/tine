@@ -2,7 +2,7 @@
 **
 **                                TINE (This is not EFI)
 **
-**                           Version 1.00.2015.09.18.07.00.0000
+**                           Version 1.00.2015.09.19.05.42.0000
 **
 ****************************************************************************************
 **
@@ -463,7 +463,7 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
       jmp HangLoop  
   } 
   
-  {
+  { // Build a paging table for the first 16 MB of memory 
     PagingTablePML4T = PagingTableAddress
     PagingTablePDPT = PagingTableAddress + 0x1000 
     PagingTablePDT = PagingTableAddress + 0x2000 
@@ -478,17 +478,24 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
       rep stosd
       
       // Maps 256 TB
-      mov dword ptr [PagingTablePML4T], PagingTablePDPT | 000000000011b    // Present, R/W, Supervisor     
+      mov dword ptr [PagingTablePML4T], PagingTablePDPT | 000000000011b                     // Present, R/W, Supervisor     
 
       // Maps 512 GB
-      mov dword ptr [PagingTablePDPT], PagingTablePDT | 000000000011b     // Present, R/W, Supervisor       
+      mov dword ptr [PagingTablePDPT], PagingTablePDT | 000000000011b                       // Present, R/W, Supervisor       
 
       // Maps 1 GB
-      mov dword ptr [PagingTablePDT], PagingTablePT | 000000000011b       // Present, R/W, Supervisor       
+      mov dword ptr [PagingTablePDT + 0x00], (PagingTablePT + 0x0000) | 000000000011b       // Present, R/W, Supervisor       
+      mov dword ptr [PagingTablePDT + 0x08], (PagingTablePT + 0x1000) | 000000000011b       // Present, R/W, Supervisor       
+      mov dword ptr [PagingTablePDT + 0x10], (PagingTablePT + 0x2000) | 000000000011b       // Present, R/W, Supervisor       
+      mov dword ptr [PagingTablePDT + 0x18], (PagingTablePT + 0x3000) | 000000000011b       // Present, R/W, Supervisor       
+      mov dword ptr [PagingTablePDT + 0x20], (PagingTablePT + 0x4000) | 000000000011b       // Present, R/W, Supervisor       
+      mov dword ptr [PagingTablePDT + 0x28], (PagingTablePT + 0x5000) | 000000000011b       // Present, R/W, Supervisor       
+      mov dword ptr [PagingTablePDT + 0x30], (PagingTablePT + 0x6000) | 000000000011b       // Present, R/W, Supervisor       
+      mov dword ptr [PagingTablePDT + 0x38], (PagingTablePT + 0x7000) | 000000000011b       // Present, R/W, Supervisor       
       
-      // Maps 2 MB (4 KB per entry)
+      // Maps 16 MB in 2 MB structure blocks (4 KB per entry)
       mov eax, 000000000011b // Present, R/W, Supervisor   
-      mov ecx, 512
+      mov ecx, 4096          // 512 * (16 >> 1)
       mov edi, PagingTablePT
     BuildPagingTableLoop:
       mov dword ptr [edi], eax
@@ -647,7 +654,8 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
           mov ax, word ptr [ebx + esi]
           lea eax, [eax + edx + 0x8000]
           shr eax, 16
-          mov word ptr [ebx+edi], dx
+          mov word ptr [ebx + edi], dx
+          jmp LoadPERelocateSkip
          LoadPERelocateDIR64:
           add dword ptr [ebx + edi], edx
           adc dword ptr [ebx + edi + 4], 0
