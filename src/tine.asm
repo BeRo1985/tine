@@ -2,7 +2,7 @@
 **
 **                                TINE (This is not EFI)
 **
-**                           Version 1.00.2015.09.19.08.23.0000
+**                           Version 1.00.2015.09.19.20.37.0000
 **
 ****************************************************************************************
 **
@@ -73,7 +73,7 @@ FATBufferSegment = 0x4000      // FAT buffer segment just right after the 64k bu
 
 PagingTableAddress = 0x8000    // 1024 bytes after the boot sector address 0x7c00      
 
-MemoryMapAddress = 0x70000     // where the ax=0xe820 int 0x15 memory map will stored
+MemoryMapAddress = 0x50000     // where the ax=0xe820 int 0x15 memory map will stored
 
 KernelLoadAddress = 0x1000000  // Load kernel raw data on the 16 MB boundary (after the possible ISA hole memory ranges)
 KernelBaseAddress = 0x100000   // Load parsed kernel on the 1 MB boundary (maximal 14MB raw data size => 16 MB - (1 MB lower memory + 1 MB possible ISA hole memory ranges)
