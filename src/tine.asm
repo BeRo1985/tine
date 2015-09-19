@@ -2,7 +2,7 @@
 **
 **                                TINE (This is not EFI)
 **
-**                           Version 1.00.2015.09.19.05.42.0000
+**                           Version 1.00.2015.09.19.08.23.0000
 **
 ****************************************************************************************
 **
@@ -285,7 +285,7 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
   {
     LoaderEntryPoint:
       jmp short SkipSignature
-    Signature:
+    Signature: 
       db "TINE\0"
       !script{
           var MillisecondsElapsedSince1January1970_00_00_00_UTC = Date.now();
@@ -463,17 +463,33 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
       jmp HangLoop  
   } 
   
-  { // Build a paging table for the first 16 MB of memory 
+  { // Build a paging table for the first maximal 64 MB of memory 
     PagingTablePML4T = PagingTableAddress
     PagingTablePDPT = PagingTableAddress + 0x1000 
     PagingTablePDT = PagingTableAddress + 0x2000 
     PagingTablePT = PagingTableAddress + 0x3000     
+    PagingTable16MB = 16777216
+    PagingTableSize = 67108864                      // must be dividable by 2 megabytes (because 1 PT = 2 megabytes)
     .bits(32)
     BuildPagingTable:
       
-      // Clear
-      xor eax, eax      
-      mov ecx, 0x1000
+      // Truncating detected memory size down to 64 MB for our initial paging table
+      mov edx, dword ptr [MemorySize + 4] 
+      test edx, edx
+      jnz BuildPagingTableSizeTruncate      
+      mov edx, dword ptr MemorySize
+      mov eax, PagingTable16MB
+      cmp edx, eax
+      cmovl edx, eax
+      cmp edx, PagingTableSize
+      jle BuildPagingTableSizeNoTruncate
+    BuildPagingTableSizeTruncate: 
+      mov edx, PagingTableSize 
+    BuildPagingTableSizeNoTruncate:          
+      
+      // Clear paging table memory range 
+      xor eax, eax    
+      mov ecx, 0xc00 + (PagingTableSize >> 12) // PML4T + PDPT + PDT + PT
       mov edi, PagingTableAddress
       rep stosd
       
@@ -484,18 +500,23 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
       mov dword ptr [PagingTablePDPT], PagingTablePDT | 000000000011b                       // Present, R/W, Supervisor       
 
       // Maps 1 GB
-      mov dword ptr [PagingTablePDT + 0x00], (PagingTablePT + 0x0000) | 000000000011b       // Present, R/W, Supervisor       
-      mov dword ptr [PagingTablePDT + 0x08], (PagingTablePT + 0x1000) | 000000000011b       // Present, R/W, Supervisor       
-      mov dword ptr [PagingTablePDT + 0x10], (PagingTablePT + 0x2000) | 000000000011b       // Present, R/W, Supervisor       
-      mov dword ptr [PagingTablePDT + 0x18], (PagingTablePT + 0x3000) | 000000000011b       // Present, R/W, Supervisor       
-      mov dword ptr [PagingTablePDT + 0x20], (PagingTablePT + 0x4000) | 000000000011b       // Present, R/W, Supervisor       
-      mov dword ptr [PagingTablePDT + 0x28], (PagingTablePT + 0x5000) | 000000000011b       // Present, R/W, Supervisor       
-      mov dword ptr [PagingTablePDT + 0x30], (PagingTablePT + 0x6000) | 000000000011b       // Present, R/W, Supervisor       
-      mov dword ptr [PagingTablePDT + 0x38], (PagingTablePT + 0x7000) | 000000000011b       // Present, R/W, Supervisor       
+      mov eax, PagingTablePT | 000000000011b       // Present, R/W, Supervisor       
+      mov ebx, PagingTablePDT
+      mov ecx, edx
+      shr ecx, 21                                  // divide by 2 megabytes   
+      jecxz BuildPagingTablePDTLoopSkip
+    BuildPagingTablePDTLoop:
+      mov dword ptr [ebx], eax
+      add eax, 0x1000
+      add ebx, 0x08
+      dec ecx
+      jnz BuildPagingTablePDTLoop
+    BuildPagingTablePDTLoopSkip:  
       
-      // Maps 16 MB in 2 MB structure blocks (4 KB per entry)
+      // Maps PagingTableSize in 2 megabytes PT blocks with 4 kilobytes per entry
       mov eax, 000000000011b // Present, R/W, Supervisor   
-      mov ecx, 4096          // 512 * (16 >> 1)
+      mov ecx, edx          
+      shr ecx, 12            // divide by 4 kilobytes     
       mov edi, PagingTablePT
     BuildPagingTableLoop:
       mov dword ptr [edi], eax
