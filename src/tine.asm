@@ -2,7 +2,7 @@
 **
 **                                TINE (This is not EFI)
 **
-**                           Version 1.00.2015.09.19.20.37.0000
+**                           Version 1.00.2015.09.20.07.22.0000
 **
 ****************************************************************************************
 **
@@ -64,21 +64,22 @@
 .cpu(all)
 .target(bin)
 .bits(16)
-.startoffset(0x0700)           // 0070:0000 (/ 0000:0700) where also the MS VBR boot sector would load us
+.startoffset(0x0700)                   // 0070:0000 (/ 0000:0700) where also the MS VBR boot sector would load us
           
-CodeSegment = 0x0000           // Maximal 29952 bytes code size for this code from 0x0000:0x0700 up to until 0x0000:07c00 
-StackSegment = 0x2000          // 64k stack
-BufferSegment = 0x3000         // 64k buffer segment just right after the 64k stack
-FATBufferSegment = 0x4000      // FAT buffer segment just right after the 64k buffer
+CodeSegment = 0x0000                   // Maximal 29952 bytes code size for this code from 0x0000:0x0700 up to until 0x0000:07c00 
+StackSegment = 0x2000                  // 64k stack
+BufferSegment = 0x3000                 // 64k buffer segment just right after the 64k stack
+FATBufferSegment = 0x4000              // FAT buffer segment just right after the 64k buffer
 
-PagingTableAddress = 0x8000    // 1024 bytes after the boot sector address 0x7c00      
+PagingTableAddress = 0x8000            // 1024 bytes after the boot sector address 0x7c00      
 
-MemoryMapAddress = 0x50000     // where the ax=0xe820 int 0x15 memory map will stored
+MemoryMapAddress = 0x50000             // where the ax=0xe820 int 0x15 memory map will stored
 
-KernelLoadAddress = 0x1000000  // Load kernel raw data on the 16 MB boundary (after the possible ISA hole memory ranges)
-KernelBaseAddress = 0x100000   // Load parsed kernel on the 1 MB boundary (maximal 14MB raw data size => 16 MB - (1 MB lower memory + 1 MB possible ISA hole memory ranges)
+KernelLoadAddress = 0x1000000          // Load kernel raw data on the 16 MB boundary (after the possible ISA hole memory ranges)
+KernelUncompressedAddress = 0x2000000  // Unpacked kernel on the 32 MB boundary 
+KernelBaseAddress = 0x100000           // Load parsed kernel on the 1 MB boundary (maximal 14MB raw data size => 16 MB - (1 MB lower memory + 1 MB possible ISA hole memory ranges)
 
-BootLoaderMagic = 0xbabeface   // instead multiboot signature 0x2badb002, since we're a fake-(U)EFI boot loader and not a multiboot-compliant boot loader 
+BootLoaderMagic = 0xbabeface           // instead multiboot signature 0x2badb002, since we're a fake-(U)EFI boot loader and not a multiboot-compliant boot loader 
 
 VBRAddress = 0x7c00
 
@@ -394,6 +395,17 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
     Code32ReloadSegments:
 
       mov ebx, KernelLoadAddress
+      cmp word ptr [ebx], 'zm'    // MZ = uncompressed, mz = compressed
+      jne KernelLoadPE
+      
+    KernelUncompress:  
+      mov edx, KernelUncompressedAddress
+      push edx
+      add ebx, 2
+      call LZBRADepacker
+      pop ebx
+      
+    KernelLoadPE:        
       mov edi, KernelBaseAddress
       call LoadPE64    
       mov dword ptr [KernelEntryPoint], eax
@@ -528,6 +540,290 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
       ret
   }
 
+  {
+    .bits(32)
+
+    LZBRADepackerFlagModel = 0
+    LZBRADepackerPrevMatchModel = 2
+    LZBRADepackerMatchLowModel = 3
+    LZBRADepackerLiteralModel = 35
+    LZBRADepackerGamma0Model = 291
+    LZBRADepackerGamma1Model = 547
+    LZBRADepackerSizeModels = 803
+
+    LZBRADepackerLocalSize = (LZBRADepackerSizeModels + 2) * 4
+    LZBRADepackerModels = -LZBRADepackerLocalSize
+    LZBRADepackerRange = LZBRADepackerModels + (LZBRADepackerSizeModels * 4)
+    LZBRADepackerCode = LZBRADepackerRange + 4
+
+    LZBRADepacker:
+      push ebp
+      mov ebp, esp
+      sub esp, LZBRADepackerLocalSize
+
+      push ebx
+      push ecx
+      push edx
+      push esi
+      push edi
+
+      cld
+      mov esi, ebx
+
+      lodsd
+      mov dword ptr [ebp + LZBRADepackerCode], eax
+
+      xor eax,eax
+      not eax
+      mov dword ptr [ebp + LZBRADepackerRange], eax
+
+      not eax
+      mov ah, 0x08 // mov eax, 2048
+      mov ecx, LZBRADepackerSizeModels
+      lea edi, [ebp + LZBRADepackerModels]
+      repe stosd
+
+      mov edi, edx
+      push edi
+
+      jmp LZBRADepackerMain
+
+    LZBRADepackerDecodeBit: // result = eax, Move = ecx, ModelIndex = eax
+      push ebx
+      push edx
+
+      // Bound:=(Range shr 12)*Model[ModelIndex];
+      lea edx, [ebp + LZBRADepackerModels + eax * 4]
+      mov eax, dword ptr [edx]
+      mov ebx, dword ptr [ebp + LZBRADepackerRange]
+      shr ebx, 12
+      push edx
+      imul eax, ebx
+      pop edx
+
+      // if Code<Bound then begin
+      cmp eax, dword ptr [ebp + LZBRADepackerCode]
+      jbe LZBRADepackerDecodeBitYes
+
+      // Range:=Bound;
+      mov dword ptr [ebp+LZBRADepackerRange],eax
+
+      // inc(Model[ModelIndex],(4096-Model[ModelIndex]) shr Move);
+      xor eax, eax // mov eax, 4096
+      mov ah, 0x10
+      sub eax, dword ptr [edx]
+      shr eax, cl
+      add dword ptr [edx], eax
+
+      // result:=0;
+      xor eax, eax
+
+      jmp LZBRADepackerCheckRenormalization
+
+    LZBRADepackerDecodeBitYes:
+
+      // dec(Code,Bound);
+      sub dword ptr [ebp + LZBRADepackerCode], eax
+
+      // dec(Range,Bound);
+      sub dword ptr [ebp + LZBRADepackerRange], eax
+
+      // dec(Model[ModelIndex],Model[ModelIndex] shr Move);
+      mov eax, dword ptr [edx]
+      shr eax, cl
+      sub dword ptr [edx], eax
+
+      // result:=1;
+      xor eax, eax
+      inc eax
+      jmp LZBRADepackerCheckRenormalization
+
+    LZBRADepackerDoRenormalization:
+      shl dword ptr [ebp + LZBRADepackerCode], 8
+      movzx edx, byte ptr [esi]
+      inc esi
+      or dword ptr [ebp + LZBRADepackerCode], edx
+      shl dword ptr [ebp + LZBRADepackerRange], 8
+    LZBRADepackerCheckRenormalization:
+      cmp dword ptr [ebp + LZBRADepackerRange], 0x1000000
+      jb LZBRADepackerDoRenormalization
+
+      pop edx
+      pop ebx
+
+      bt eax, 0 // Carry flay = first LSB bit of eax
+      ret
+
+    LZBRADepackerDecodeTree: // result = eax, MaxValue = eax, Move = ecx, ModelIndex = edx
+      push edi
+      mov edi, eax
+      // result:=1;
+      xor eax, eax
+      inc eax
+    LZBRADepackerDecodeTreeLoop:
+      // while result<MaxValue do begin
+      cmp eax, edi
+      jge LZBRADepackerDecodeTreeLoopDone
+      // result:=(result shl 1) or DecodeBit(ModelIndex+result,Move);
+      push eax
+      add eax, edx
+      call LZBRADepackerDecodeBit
+      pop eax
+      adc eax, eax
+      jmp LZBRADepackerDecodeTreeLoop
+    LZBRADepackerDecodeTreeLoopDone:
+      sub eax, edi
+      pop edi
+      ret
+
+    LZBRADepackerDecodeGamma: // result = eax, ModelIndex = edx
+      push ebx
+      push edx
+      mov edx, dword ptr [esp + 12] // First parameter offset = 2 pushs + call address = (4*2)+2 = 12
+      xor eax, eax         // result:=1;
+      inc eax
+      mov ebx, eax         // Conext:=1;
+    LZBRADepackerDecodeGammaLoop:
+      push eax
+      mov cl,5             // Move:=5;
+      lea eax, [edx + ebx] // ModelIndex+Context
+      call LZBRADepackerDecodeBit
+      adc bl, bl           // Context:=(Context shl 1) or NewBit;
+      lea eax, [edx + ebx] // ModelIndex+Context
+      call LZBRADepackerDecodeBit
+      mov cl, al
+      pop eax
+      add eax, eax         // Value:=(Value shl 1) or NewBit;
+      or al, cl
+      add bl, bl
+      or bl, cl
+      test bl, 2
+      jnz LZBRADepackerDecodeGammaLoop
+      pop edx
+      pop ebx
+      ret 4
+
+    LZBRADepackerMain:
+      xor ebx, ebx // Last offset
+      xor edx, edx // bit 1=LastWasMatch, bit 0=Flag
+
+    LZBRADepackerLoop:
+
+      // if Flag then begin
+      test dl, 1
+      jz LZBRADepackerLiteral
+
+    LZBRADepackerMatch:
+      // if (not LastWasMatch) and (DecodeBit(PrevMatchModel,5)<>0) then begin
+      test dl, 2
+      jnz LZBRADepackerNormalMatch
+      xor eax, eax // PrevMatchModel
+      mov al, LZBRADepackerPrevMatchModel
+      mov cl, 5
+      call LZBRADepackerDecodeBit
+      jnc LZBRADepackerNormalMatch
+      xor ecx, ecx // Len=0
+      jmp LZBRADepackerDoMatch
+    LZBRADepackerNormalMatch:
+
+      // Offset:=DecodeGamma(Gamma0Model);
+      push LZBRADepackerGamma0Model
+      call LZBRADepackerDecodeGamma
+
+      // if Offset=0 then exit;
+      test eax, eax
+      jz LZBRADepackerWeAreDone
+
+      // dec(Offset,2);
+      lea ebx, [eax - 2]
+
+      // Offset:=((Offset shl 4)+DecodeTree(MatchLowModel+(ord(Offset<>0) shl 4),16,5))+1;
+      push edx
+      test ebx, ebx
+      setnz dl
+      movzx edx, dl
+      shl edx, 4
+      add edx, LZBRADepackerMatchLowModel
+      mov cl, 5
+      xor eax, eax
+      mov al, 16
+      call LZBRADepackerDecodeTree
+      pop edx
+      shl ebx, 4
+      lea ebx, [eax + ebx + 1]
+
+      // Len:=ord(Offset>=96)+ord(Offset>=2048);
+      xor ecx, ecx
+      xor eax, eax
+      cmp ebx, 2048
+      setge al
+      add ecx, eax
+      cmp ebx, 96
+      setge al
+      add ecx, eax                                                           
+
+      LZBRADepackerDoMatch:
+
+      or dl,2 // LastWasMatch = true
+
+      // inc(Len,DecodeGamma(Gamma1Model));
+      push ecx
+      push LZBRADepackerGamma1Model
+      call LZBRADepackerDecodeGamma
+      pop ecx
+      add ecx, eax
+
+      push esi
+      mov esi, edi
+      sub esi, ebx
+      repe movsb
+      pop esi
+
+      jmp LZBRADepackerNextFlag
+
+    LZBRADepackerLiteral:
+      // byte(pointer(Destination)^):=DecodeTree(LiteralModel,256,4);
+      push edx
+      xor eax, eax // mov eax, 256
+      inc ah
+      mov cl, 4
+      mov edx, LZBRADepackerLiteralModel
+      call LZBRADepackerDecodeTree
+      pop edx
+      // inc(Destination);
+      stosb
+      // LastWasMatch:=false;
+      and dl,0xfd
+
+    LZBRADepackerNextFlag:
+      // Flag:=boolean(byte(DecodeBit(FlagModel+byte(boolean(LastWasMatch)),5)));
+      movzx eax, dl
+      and al, 1
+      mov cl, 5
+      call LZBRADepackerDecodeBit
+      and dl, 0xfe
+      or dl, al
+
+      jmp LZBRADepackerLoop
+
+    LZBRADepackerWeAreDone:
+
+      mov eax, edi
+      pop edi
+      sub eax, edi
+
+      pop edi
+      pop esi
+      pop edx
+      pop ecx
+      pop ebx
+
+      mov esp, ebp
+      pop ebp
+      ret
+          
+  }
+  
   {
     .bits(32)
     LoadPE64:
