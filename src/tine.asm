@@ -501,15 +501,17 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
       
       // Clear paging table memory range 
       xor eax, eax    
-      mov ecx, 0xc00 + (PagingTableSize >> 12) // PML4T + PDPT + PDT + PT
+      mov ecx, ((PagingTablePT - PagingTablePML4T) + (PagingTableSize >> 10)) >> 2 // PML4T + PDPT + PDT + PT
       mov edi, PagingTableAddress
       rep stosd
       
       // Maps 256 TB
       mov dword ptr [PagingTablePML4T], PagingTablePDPT | 000000000011b                     // Present, R/W, Supervisor     
+      mov dword ptr [PagingTablePML4T + (511 * 8)], PagingTablePDPT | 000000000011b         // Present, R/W, Supervisor     
 
       // Maps 512 GB
       mov dword ptr [PagingTablePDPT], PagingTablePDT | 000000000011b                       // Present, R/W, Supervisor       
+      mov dword ptr [PagingTablePDPT + (510 * 8)], PagingTablePDT | 000000000011b           // Present, R/W, Supervisor       
 
       // Maps 1 GB
       mov eax, PagingTablePT | 000000000011b       // Present, R/W, Supervisor       
@@ -2123,16 +2125,16 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
       dd (CodeSegment << 4) + (offset GDTTable)           // start of table
     GDTTable:
       GDTTableEntry0:
-        GDTEntry 0x0000, 0x0000, 0x00, 0x00, 0x00, 0x00   // entry 0 is always unused
+        GDTEntry 0x0000, 0x0000, 0x00, 000000000b, 000000000b, 0x00   // entry 0 is always unused
       GDTTableEntry1: // Code, Present, Ring 0, Code, Non-conforming, Readable, Page-granular
-        GDTEntry 0xffff, 0x0000, 0x00, 0x9a, 0xcf, 0x00
+        GDTEntry 0xffff, 0x0000, 0x00, 010011010b, 011001111b, 0x00
       GDTTableEntry2: // Data, Present, Ring 0, Data, Expand-up, Writable, Page-granular
-        GDTEntry 0xffff, 0x0000, 0x00, 0x92, 0xcf, 0x00
+        GDTEntry 0xffff, 0x0000, 0x00, 010010010b, 011001111b, 0x00
       GDTTableEntry3: // 64-bit code 
-        GDTEntry 0xffff, 0x0000, 0x00, 0x9b, 0xaf, 0x00
+        GDTEntry 0xffff, 0x0000, 0x00, 010011011b, 010101111b, 0x00
     .comment{
       GDTTableEntry4: // Interrupts
-        GDTEntry 0xffff, 0x1000, 0x00, 0x9e, 0xcf, 0x00
+        GDTEntry 0xffff, 0x1000, 0x00, 010011110b, 011001111b, 0x00
     } 
     GDTTableEnd:    
   }
@@ -2144,11 +2146,15 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
       dd (CodeSegment << 4) + (offset GDT64Table)             // start of table
     GDT64Table:
       GDT64TableEntry0:
-        GDTEntry 0x0000, 0x0000, 0x00, 0x00, 0x00, 0x00   // entry 0 is always unused
-      GDT64TableEntry1: // Code
-        GDTEntry 0x0000, 0x0000, 0x00, 0x9a, 0x20, 0x00
-      GDT64TableEntry2: // Data
-        GDTEntry 0x0000, 0x0000, 0x00, 0x92, 0x20, 0x00
+        GDTEntry 0x0000, 0x0000, 0x00, 000000000b, 000000000b, 0x00   // entry 0 is always unused
+      GDT64TableEntry1: // Ring0 code 
+        GDTEntry 0x0000, 0x0000, 0x00, 010011010b, 000100000b, 0x00
+      GDT64TableEntry2: // Ring0 data
+        GDTEntry 0x0000, 0x0000, 0x00, 010010010b, 000100000b, 0x00
+      GDT64TableEntry3: // Ring3 code 
+        GDTEntry 0x0000, 0x0000, 0x00, 011111010b, 000100000b, 0x00
+      GDT64TableEntry4: // Ring3 data
+        GDTEntry 0x0000, 0x0000, 0x00, 011110010b, 000100000b, 0x00
     GDT64TableEnd:    
   }
   
