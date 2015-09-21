@@ -2,7 +2,7 @@
 **
 **                                TINE (This is not EFI)
 **
-**                           Version 1.00.2015.09.20.07.22.0000
+**                           Version 1.00.2015.09.21.13.48.0000
 **
 ****************************************************************************************
 **
@@ -507,11 +507,9 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
       
       // Maps 256 TB
       mov dword ptr [PagingTablePML4T], PagingTablePDPT | 000000000011b                     // Present, R/W, Supervisor     
-      mov dword ptr [PagingTablePML4T + (511 * 8)], PagingTablePDPT | 000000000011b         // Present, R/W, Supervisor     
 
       // Maps 512 GB
       mov dword ptr [PagingTablePDPT], PagingTablePDT | 000000000011b                       // Present, R/W, Supervisor       
-      mov dword ptr [PagingTablePDPT + (510 * 8)], PagingTablePDT | 000000000011b           // Present, R/W, Supervisor       
 
       // Maps 1 GB
       mov eax, PagingTablePT | 000000000011b       // Present, R/W, Supervisor       
