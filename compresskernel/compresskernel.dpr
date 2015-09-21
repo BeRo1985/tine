@@ -1,3 +1,36 @@
+(***************************************************************************************
+**
+** Copyright (C) 2015, Benjamin 'BeRo' Rosseaux ( benjamin[at]rosseaux[dot]de )
+** All rights reserved.
+**
+** Redistribution and use in source and binary forms, with or without
+** modification, are permitted provided that the following conditions are met:
+**
+** 1. Redistributions of source code must retain the above copyright notice, this
+**    list of conditions and the following disclaimer.
+** 2. Redistributions in binary form must reproduce the above copyright notice,
+**    this list of conditions and the following disclaimer in the documentation
+**    and/or other materials provided with the distribution.
+** 3. Neither the name of the copyright holders nor the names of its contributors
+**    may be used to endorse or promote products derived from this software without
+**    specific prior written permission.
+**
+** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+** ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+** WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+** DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+** ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+** (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+** LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+** ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+** SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+**
+** The views and conclusions contained in the software and documentation are those
+** of the authors and should not be interpreted as representing official policies,
+** either expressed or implied, of the author.
+**
+*************************************************************************************)
 program compresskernel;
 {$ifdef fpc}
  {$mode delphi}
@@ -24,7 +57,7 @@ const FlagModel=0;
 
 //{$define OptimalParsing}
 
-function CompressLZBRAWithBruteforceOptimalParsing(SourcePointer,DestinationPointer:pointer;Size,WindowSize:longword;StatusHook:TCompressStatusHook):longword;
+function CompressLZBRAWithBruteforceOptimalParsing(SourcePointer,DestinationPointer:pointer;Size,WindowSize,MaximalMatchLength:longword;StatusHook:TCompressStatusHook):longword;
 type PState=^TState;
      TState=record
       Code:longword;
@@ -882,8 +915,12 @@ end;
 const Signature:array[0..1] of ansichar='mz';
 
 var SourceMemoryStream,DestinationMemoryStream{,OtherDestinationMemoryStream}:TMemoryStream;
-    Size,WindowSize:longword;
+    Size,WindowSize,MaximalMatchLength:longword;
 begin
+ if ParamCount<2 then begin
+  writeln('Usage: compresskernel [inputfile] [outputfile] ([windowsize]) ([maximalmatchlength](forces slow bruteforce optimal parsing))');
+  halt(0);
+ end;
  if ParamCount>2 then begin
   WindowSize:=StrToIntDef(ParamStr(3),16);
   if WindowSize<16 then begin
@@ -903,7 +940,11 @@ begin
    DestinationMemoryStream.Write(Size,SizeOf(longword));
    DestinationMemoryStream.Size:=SizeOf(Signature)+SizeOf(longword)+(SourceMemoryStream.Size*3);
    if ParamCount>3 then begin
-    Size:=CompressLZBRAWithBruteforceOptimalParsing(SourceMemoryStream.Memory,@PAnsiChar(DestinationMemoryStream.Memory)[SizeOf(Signature)+SizeOf(longword)],SourceMemoryStream.Size,WindowSize,CompressStatusHook);
+    MaximalMatchLength:=StrToIntDef(ParamStr(4),$40000000);
+    if MaximalMatchLength<16 then begin
+     MaximalMatchLength:=16;
+    end;
+    Size:=CompressLZBRAWithBruteforceOptimalParsing(SourceMemoryStream.Memory,@PAnsiChar(DestinationMemoryStream.Memory)[SizeOf(Signature)+SizeOf(longword)],SourceMemoryStream.Size,WindowSize,MaximalMatchLength,CompressStatusHook);
    end else begin
     Size:=CompressLZBRA(SourceMemoryStream.Memory,@PAnsiChar(DestinationMemoryStream.Memory)[SizeOf(Signature)+SizeOf(longword)],SourceMemoryStream.Size,WindowSize,CompressStatusHook);
    end;
