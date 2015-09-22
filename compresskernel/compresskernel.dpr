@@ -917,54 +917,60 @@ const Signature:array[0..7] of ansichar='LZBRAIMG';
 var SourceMemoryStream,DestinationMemoryStream{,OtherDestinationMemoryStream}:TMemoryStream;
     Size,WindowSize,MaximalMatchLength:longword;
 begin
- if ParamCount<2 then begin
-  writeln('Usage: compresskernel [inputfile] [outputfile] ([windowsize]) ([maximalmatchlength](forces slow bruteforce optimal parsing))');
-  halt(0);
- end;
- if ParamCount>2 then begin
-  WindowSize:=StrToIntDef(ParamStr(3),16);
-  if WindowSize<16 then begin
-   WindowSize:=16;
-  end;
- end else begin
-  WindowSize:=65536;
- end;
- OldTrg:=-1;
- SourceMemoryStream:=TMemoryStream.Create;
  try
-  SourceMemoryStream.LoadFromFile(ParamStr(1));
-  DestinationMemoryStream:=TMemoryStream.Create;
-  try
-   DestinationMemoryStream.Write(Signature,SizeOf(Signature));
-   Size:=SourceMemoryStream.Size;
-   DestinationMemoryStream.Write(Size,SizeOf(longword));
-   DestinationMemoryStream.Size:=SizeOf(Signature)+SizeOf(longword)+(SourceMemoryStream.Size*3);
-   if ParamCount>3 then begin
-    MaximalMatchLength:=StrToIntDef(ParamStr(4),$40000000);
-    if MaximalMatchLength<16 then begin
-     MaximalMatchLength:=16;
-    end;
-    Size:=CompressLZBRAWithBruteforceOptimalParsing(SourceMemoryStream.Memory,@PAnsiChar(DestinationMemoryStream.Memory)[SizeOf(Signature)+SizeOf(longword)],SourceMemoryStream.Size,WindowSize,MaximalMatchLength,CompressStatusHook);
-   end else begin
-    Size:=CompressLZBRA(SourceMemoryStream.Memory,@PAnsiChar(DestinationMemoryStream.Memory)[SizeOf(Signature)+SizeOf(longword)],SourceMemoryStream.Size,WindowSize,CompressStatusHook);
-   end;
-   DestinationMemoryStream.Size:=SizeOf(Signature)+SizeOf(longword)+Size;
-   DestinationMemoryStream.SaveToFile(ParamStr(2));
-   OldTrg:=-1;
-   CompressStatusHook(100,100);
-{  OtherDestinationMemoryStream:=TMemoryStream.Create;
-   try
-    OtherDestinationMemoryStream.Size:=SourceMemoryStream.Size*4;
-    OtherDestinationMemoryStream.Size:=DecompressLZBRA(@PAnsiChar(DestinationMemoryStream.Memory)[SizeOf(Signature)+SizeOf(longword)],OtherDestinationMemoryStream.Memory);
-    OtherDestinationMemoryStream.SaveToFile('output2.dat');
-   finally
-    OtherDestinationMemoryStream.Free;
-   end;{}
-  finally
-   DestinationMemoryStream.Free;
+  if ParamCount<2 then begin
+   writeln('Usage: compresskernel [inputfile] [outputfile] ([windowsize]) ([maximalmatchlength](forces slow bruteforce optimal parsing))');
+   halt(0);
   end;
- finally
-  SourceMemoryStream.Free;
+  if ParamCount>2 then begin
+   WindowSize:=StrToIntDef(ParamStr(3),16);
+   if WindowSize<16 then begin
+    WindowSize:=16;
+   end;
+  end else begin
+   WindowSize:=65536;
+  end;
+  OldTrg:=-1;
+  SourceMemoryStream:=TMemoryStream.Create;
+  try
+   SourceMemoryStream.LoadFromFile(ParamStr(1));
+   DestinationMemoryStream:=TMemoryStream.Create;
+   try
+    DestinationMemoryStream.Write(Signature,SizeOf(Signature));
+    Size:=SourceMemoryStream.Size;
+    DestinationMemoryStream.Write(Size,SizeOf(longword));
+    DestinationMemoryStream.Size:=SizeOf(Signature)+SizeOf(longword)+(SourceMemoryStream.Size*3);
+    if ParamCount>3 then begin
+     MaximalMatchLength:=StrToIntDef(ParamStr(4),$40000000);
+     if MaximalMatchLength<16 then begin
+      MaximalMatchLength:=16;
+     end;
+     Size:=CompressLZBRAWithBruteforceOptimalParsing(SourceMemoryStream.Memory,@PAnsiChar(DestinationMemoryStream.Memory)[SizeOf(Signature)+SizeOf(longword)],SourceMemoryStream.Size,WindowSize,MaximalMatchLength,CompressStatusHook);
+    end else begin
+     Size:=CompressLZBRA(SourceMemoryStream.Memory,@PAnsiChar(DestinationMemoryStream.Memory)[SizeOf(Signature)+SizeOf(longword)],SourceMemoryStream.Size,WindowSize,CompressStatusHook);
+    end;
+    DestinationMemoryStream.Size:=SizeOf(Signature)+SizeOf(longword)+Size;
+    DestinationMemoryStream.SaveToFile(ParamStr(2));
+    OldTrg:=-1;
+    CompressStatusHook(100,100);
+ {  OtherDestinationMemoryStream:=TMemoryStream.Create;
+    try
+     OtherDestinationMemoryStream.Size:=SourceMemoryStream.Size*4;
+     OtherDestinationMemoryStream.Size:=DecompressLZBRA(@PAnsiChar(DestinationMemoryStream.Memory)[SizeOf(Signature)+SizeOf(longword)],OtherDestinationMemoryStream.Memory);
+     OtherDestinationMemoryStream.SaveToFile('output2.dat');
+    finally
+     OtherDestinationMemoryStream.Free;
+    end;{}
+   finally
+    DestinationMemoryStream.Free;
+   end;
+  finally
+   SourceMemoryStream.Free;
+  end;
+ except
+  on e:Exception do begin
+   writeln(e.Message);
+  end;
  end;
  writeln;
 end.
