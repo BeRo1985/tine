@@ -2,7 +2,7 @@
 **
 **                                TINE (This is not EFI)
 **
-**                           Version 1.00.2015.09.21.13.48.0000
+**                           Version 1.00.2015.09.22.13.10.0000
 **
 ****************************************************************************************
 **
@@ -394,21 +394,52 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
       jmp dword 0x0008:(CodeSegment << 4) + (offset Code32ReloadSegments)
     Code32ReloadSegments:
 
+      // Check for LZBRABIN signature    
       mov ebx, KernelLoadAddress
-      cmp word ptr [ebx], 'zm'    // MZ = uncompressed, mz = compressed
-      jne KernelLoadPE
+      cmp dword ptr [ebx], 'RBZL' 
+      jne KernelUncompressed
+      cmp dword ptr [ebx + 4], 'GMIA' 
+      jne KernelUncompressed
       
     KernelUncompress:  
       mov edx, KernelUncompressedAddress
       push edx
-      add ebx, 2
+      add ebx, 8 + 4
       call LZBRADepacker
       pop ebx
       
+    KernelUncompressed:
+    
+      cmp dword ptr [ebx], 'FLE\x7F'  
+      je KernelLoadELF
+      
     KernelLoadPE:        
+      mov eax, ebx
+      cmp word ptr [eax], 'ZM'   
+      jne KernelLoadFlat
+      add eax, dword ptr [eax + 0x3c]
+      cmp word ptr [eax], 'EP'   
+      jne KernelLoadFlat      
       mov edi, KernelBaseAddress
       call LoadPE64    
       mov dword ptr [KernelEntryPoint], eax
+      jmp KernelLoadFlatSkip
+      
+    KernelLoadELF:
+    KernelLoadELFHang:
+      jmp KernelLoadELFHang
+      jmp KernelLoadFlatSkip
+     
+    KernelLoadFlat:
+      
+      mov esi, ebx
+      mov edi, KernelBaseAddress
+      mov dword ptr [KernelEntryPoint], edi
+      mov ecx, 0xe00000 >> 2
+      cld
+      rep movsd
+
+    KernelLoadFlatSkip:    
       
       call BuildPagingTable      
     
@@ -835,7 +866,7 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
       // esi/ebx = MZ-EXE Header
       mov esi, ebx
       mov eax, ebx
-      add eax, dword [eax + 0x3c]
+      add eax, dword ptr [eax + 0x3c]
 
       // Clear memory
       push eax
@@ -2166,8 +2197,8 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
   }
   
   {
-    KernelFileName: db "KERNEL  EFI"
-  }
+    KernelFileName: db "KERNEL  BIN"
+  }                    
  
   .comment{ // just for as reference for the procedural BuildPagingTable routine above, therefore commented out
     .align(4096)

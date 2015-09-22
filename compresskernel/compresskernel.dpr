@@ -912,7 +912,7 @@ begin
  end;
 end;
 
-const Signature:array[0..1] of ansichar='mz';
+const Signature:array[0..7] of ansichar='LZBRAIMG';
 
 var SourceMemoryStream,DestinationMemoryStream{,OtherDestinationMemoryStream}:TMemoryStream;
     Size,WindowSize,MaximalMatchLength:longword;

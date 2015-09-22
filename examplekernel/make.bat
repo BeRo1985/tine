@@ -1,2 +1,2 @@
 @echo off
-..\toolchain\sasm kernel.asm kernel.efi
+..\toolchain\sasm kernel.asm kernel.bin
